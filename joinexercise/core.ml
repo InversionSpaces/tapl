@@ -74,11 +74,38 @@ let rec subtype tyS tyT =
    | (_,_) ->
        false
 
+exception NoMeet
+
 let rec join tyS tyT =
-  (* Write me *) assert false
+    match (tyS, tyT) with
+      (TyRecord(fS), TyRecord(fT)) ->
+        let fR = List.concat_map (fun (li,tyLi) ->
+            match List.assoc_opt li fT with
+              None -> []
+            | Some tyTi -> [(li, join tyLi tyTi)]) fS
+        in TyRecord(fR)
+    | (TyArr(tyS1,tyS2), TyArr(tyT1,tyT2)) -> 
+       (try let tyL = meet tyS1 tyT1 in
+            let tyR = join tyS2 tyT2 in TyArr(tyL, tyR)
+        with NoMeet -> TyTop)
+    | (TyBool, TyBool) -> TyBool
+    | (_, _) -> TyTop
 
 and meet tyS tyT =
-  (* Write me *) assert false
+    match (tyS, tyT) with
+      (_, TyTop) -> TyTop 
+    | (TyTop, _) -> TyTop
+    | (TyBool, TyBool) -> TyBool
+    | (TyRecord(fS), TyRecord(fT)) ->
+          let fR = List.fold_left (fun acc (li, tyLi) ->
+              match List.assq_opt li acc with
+                None -> (li, tyLi) :: acc
+              | Some tyTi -> (li, join tyLi tyTi) :: acc) fS fT
+          in TyRecord(fR)
+    | (TyArr(tyS1,tyS2), TyArr(tyT1,tyT2)) ->
+          let tyL = join tyS1 tyT1 in
+          let tyR = meet tyS2 tyT2 in TyArr(tyL, tyR)
+    | (_,_) -> raise NoMeet
 
 (* ------------------------   TYPING  ------------------------ *)
 
@@ -112,4 +139,9 @@ let rec typeof ctx t =
   | TmFalse(fi) ->
       TyBool
   | TmIf(fi,t1,t2,t3) ->
-      (* write me *) assert false
+      let tyT1 = typeof ctx t1 in
+      let tyT2 = typeof ctx t2 in
+      let tyT3 = typeof ctx t3 in
+      if subtype tyT1 TyBool then join tyT2 tyT3
+      else error fi "guard of conditional not a boolean"
+          
